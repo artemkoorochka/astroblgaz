@@ -1,5 +1,5 @@
 <?php
-use Bitrix\Main\EventManager,
+use Bitrix\Main\ModuleManager,
     Bitrix\Main\Localization\Loc;
 
 
@@ -33,7 +33,8 @@ class trionix_astroblgaz extends CModule
     {
         $this->InstallFiles();
         $this->InstallDB();
-        RegisterModule($this->MODULE_ID);
+        ModuleManager::registerModule($this->MODULE_ID);
+
     }
 
     /**
@@ -44,7 +45,7 @@ class trionix_astroblgaz extends CModule
     {
         $this->UnInstallDB();
         $this->UnInstallFiles();
-        UnRegisterModule($this->MODULE_ID);
+        ModuleManager::unRegisterModule($this->MODULE_ID);
     }
 
     /**
@@ -66,7 +67,6 @@ class trionix_astroblgaz extends CModule
     {
         global $DB;
         $DB->RunSQLBatch(dirname(__FILE__)."/sql/uninstall.sql");
-
         return true;
     }
 
