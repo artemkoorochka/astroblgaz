@@ -10,7 +10,8 @@ class customerFilter extends CBitrixComponent
     private $_items;
     private $_itemParents = array();
     private $_customers;
-    private $_filter;
+    private $_filter = array();
+    private $_tmpFilter = array();
     private $_errors;
 
     /**
@@ -42,49 +43,19 @@ class customerFilter extends CBitrixComponent
      */
     public function setFilter($requestFilter)
     {
-        if(empty($requestFilter))
-            return false;
+        $this->_filter = array_merge($this->_filter, $requestFilter);
+        $this->_tmpFilter = array();
 
-        $filter = array();
-        foreach ($requestFilter as $item){
-
-            if(is_array($this->_itemParents[$item]))
-            {
-                $filter = array_merge($filter, $this->_itemParents[$item]);
-            }
-
-            $filter[] = $item;
-        }
-
-        if(count($filter) > 1){
-            $requestFilter = $filter;
-            foreach ($requestFilter as $item){
-
-                if(is_array($this->_itemParents[$item]))
-                {
-                    $filter = array_merge($filter, $this->_itemParents[$item]);
-                }
-
-                $filter[] = $item;
+        // search and register parents
+        foreach ($requestFilter as $id){
+            if(is_array($this->_itemParents[$id])){
+                $this->_tmpFilter = array_merge($this->_tmpFilter, $this->_itemParents[$id]);
             }
         }
 
-        if(count($filter) > 1){
-            $requestFilter = $filter;
-            foreach ($requestFilter as $item){
-
-                if(is_array($this->_itemParents[$item]))
-                {
-                    $filter = array_merge($filter, $this->_itemParents[$item]);
-                }
-
-                $filter[] = $item;
-            }
+        if(!empty($this->_tmpFilter)){
+            $this->setFilter($this->_tmpFilter);
         }
-
-        $filter = array_unique($filter);
-
-        $this->_filter = $filter;
     }
 
     /**
@@ -142,9 +113,8 @@ class customerFilter extends CBitrixComponent
                 //$this->_filter = array();
                 $this->setError(Loc::getMessage("ADRESS_IS_EMPTY"));
             }
+            $this->_filter = $filter;
         }
-
-
     }
 
     /**
@@ -161,8 +131,6 @@ class customerFilter extends CBitrixComponent
     public function setItems()
     {
         $items = array();
-        $_itemParents = array();
-
         // get parent map
         foreach ($this->getItems() as $item){
             if($item["PARENT"] > 0)
@@ -255,7 +223,7 @@ class customerFilter extends CBitrixComponent
 
     public function executeComponent()
     {
-
+        
         if($this->startResultCache()){
             if(Loader::includeModule("trionix.astroblgaz")){
                 $this->setItems();
