@@ -2,17 +2,12 @@
 use Bitrix\Main\Loader,
     Bitrix\Astroblgaz\AdressTable,
     Bitrix\Astroblgaz\CustomerTable,
-    Bitrix\Main\Application,
-    Bitrix\Main\Localization\Loc;
+    Bitrix\Main\Application;
 
 class customerFilter extends CBitrixComponent
 {
-    private $_items;
-    private $_itemParents = array();
-    private $_customers;
-    private $_filter = array();
-    private $_tmpFilter = array();
-    private $_errors;
+    private $_module = "trionix.astroblgaz";
+    private $_fields = array();
 
     /**
      * @return mixed
@@ -33,221 +28,93 @@ class customerFilter extends CBitrixComponent
     /**
      * @return mixed
      */
-    public function getFilter()
+    public function getFields()
     {
         return $this->_filter;
     }
 
     /**
-     * @param mixed $filter
+     * Set filter fields from map
      */
-    public function setFilter($requestFilter)
+    public function setFields()
     {
-        $this->_filter = array_merge($this->_filter, $requestFilter);
-        $this->_tmpFilter = array();
+        if(Loader::includeModule($this->_module)){
 
-        // search and register parents
-        foreach ($requestFilter as $id){
-            if(is_array($this->_itemParents[$id])){
-                $this->_tmpFilter = array_merge($this->_tmpFilter, $this->_itemParents[$id]);
-            }
-        }
-
-        if(!empty($this->_tmpFilter)){
-            $this->setFilter($this->_tmpFilter);
-        }
-    }
-
-    /**
-     * @return mixed
-     */
-    public function getCustomers()
-    {
-        return $this->_customers;
-    }
-
-    /**
-     * Set customers from DB
-     * @param $adresQuery
-     * @throws \Bitrix\Main\ArgumentException
-     * @throws \Bitrix\Main\ObjectPropertyException
-     * @throws \Bitrix\Main\SystemException
-     */
-    public function setCustomers($adresQuery)
-    {
-        $customers = array();
-        $filter = array();
-
-        if(empty($this->getFilter())){
-            $result = CustomerTable::getList();
-        }else{
-            $result = CustomerTable::getList(array(
-                "filter" => array("PARENT" => $this->getFilter())
+            $this->_filter["ADRESS"] = array();
+            $adress = AdressTable::getList(array(
+                "order" => array("LEVEL" => "ASC"),
+                "group" => array("TITLE"),
+                "select" => array("TITLE")
             ));
+            while ($adresy = $adress->fetch()){
+                $this->_filter["ADRESS"][]  = $adresy["TITLE"];
+            }
+            $this->_filter["ADRESS"] = array_unique($this->_filter["ADRESS"]);
+            $this->_filter["CUSTOMER"] = CustomerTable::getMap();
         }
+    }
 
-        while ($customer = $result->fetch()){
+    public function userPost(){
+        $request = Application::getInstance()->getContext()->getRequest();
+        if($request->isPost()){
+            // set adress
+            $this->arResult["POST"] = $_POST;
+        }
+    }
 
-            if(!empty($this->arResult["CUSTOMERS_QUERY"]) || !empty($this->arResult["SCORE_QUERY"])){
-                if($this->arResult["CUSTOMERS_QUERY"] == $customer["ADRESS"]){
-                    $customers[$customer["ID"]] = $customer;
-                    $filter[] = $customer["ID"];
-                }
+    public function combinateResultFilter(){
+        $arFilter = array();
 
-                if($this->arResult["SCORE_QUERY"] == $customer["SCORE"]){
-                    $customers[$customer["ID"]] = $customer;
-                    $filter[] = $customer["ID"];
-                }
-
-            }else{
-                $filter[] = $customer["ID"];
-                $customers[$customer["ID"]] = $customer;
-
+        foreach ($this->arResult["POST"][$this->arParams["INPUT_CUSTOMER"]] as $key=>$value){
+            if(!empty($value)){
+                $arFilter[$key] = $value;
             }
         }
 
-        $this->_customers = $customers;
-
-        if(!empty($adresQuery) && is_array($adresQuery)) {
-            if(empty($this->arResult["CUSTOMERS_QUERY"]) && empty($this->arResult["SCORE_QUERY"])){
-                //$this->_filter = array();
-                $this->setError(Loc::getMessage("ADRESS_IS_EMPTY"));
-            }
-            $this->_filter = $filter;
-        }
-    }
-
-    /**
-     * @return mixed
-     */
-    public function getItems()
-    {
-        return $this->_items;
-    }
-
-    /**
-     * Set items from DB
-     */
-    public function setItems()
-    {
-        $items = array();
-        // get parent map
-        foreach ($this->getItems() as $item){
-            if($item["PARENT"] > 0)
-                $parents[$item["PARENT"]][] = $item["ID"];
-        }
-
-        $result = AdressTable::getList();
-        while ($item = $result->fetch()){
-            $items[$item["ID"]] = $item;
-
-            // fill perents map
-            if($item["PARENT"] > 0){
-                $this->_itemParents[$item["PARENT"]][] = $item["ID"];
-            }
-        }
-
-        $this->_items = $items;
-    }
-
-    public function grouppingItems(){
-        $currentTitle = "";
-        $separatedItems = array();
-        foreach ($this->getItems() as $id=>$arItem){
-            $separatedItems[$arItem["TITLE"]][] = $arItem;
-        }
-
-        $this->_items = $separatedItems;
-    }
-
-    /**
-     * @return \Bitrix\Main\HttpRequest
-     * @throws \Bitrix\Main\SystemException
-     */
-    public function implementRequest(){
-        $adresQuery = "";
-        if(!empty($this->getItems())){
-            $request = Application::getInstance()->getContext()->getRequest();
-            if($request->isPost()){
-                $adresQuery = $request->getPost($this->arParams["INPUT_NAME"]);
-                $filter = array();
-                if(is_array($request->getPost($this->arParams["INPUT_NAME"]))){
-                    foreach ($request->getPost($this->arParams["INPUT_NAME"]) as $value){
-                        foreach ($this->getItems() as $item){
-                            if($value == $item["NAME"] . " " . $item["SHORT_NAME"] . "."){
-                                $filter[] = $item["ID"];
-                                $this->_items[$item["ID"]]["selected"] = "selected";
-                            }
-                        }
-                    }
-
-                    $this->arResult["CUSTOMERS_QUERY"] = trim($_POST[$this->arParams["INPUT_NAME"]]["ADRESS"]);
-                    $this->arResult["SCORE_QUERY"] = trim($_POST[$this->arParams["INPUT_NAME"]]["SCORE"]);
-
-
-                }else{
-                    $search = $request->getPost($this->arParams["INPUT_NAME"]);
-                    $this->arResult["SEARCH_QUERY"] = $search;
-                    if(strpos($search, ",")){
-                        foreach ($this->getCustomers() as $item){
-                            if($item["ADRESS"] == $search){
-                                $filter[] = $search;
-                            }
-                        }
-                    }else{
-                        $search = explode(".", $search);
-                        $search[0] = trim($search[0]);
-                        $search[1] = trim($search[1]);
-                        foreach ($this->getItems() as $item){
-                            if(
-                                $item["SHORT_NAME"] == $search[0] &&
-                                $item["NAME"] == $search[1]
-                            ){
-                                $filter[] = $item["ID"];
-                            }
-                        }
+        // PARENT
+        if(Loader::includeModule($this->_module)){
+            foreach ($this->arResult["POST"][$this->arParams["INPUT_ADRESS"]] as $value) {
+                if(!empty($value)){
+                    $value = explode(". ", $value);
+                    unset($value[0]);
+                    $value = implode(" ", $value);
+                    if(!empty($value)){
+                        $adress[] = $value;
                     }
                 }
+            }
+            $adress = AdressTable::getList(array(
+                "filter" => array("NAME" => $adress),
+                "select" => array("*")
+            ));
+            while ($adresy = $adress->fetch()){
 
-                $this->setFilter($filter);
+                $arFilter["PARENT"][] = $adresy["ID"];
             }
 
-            // set filter mode
-            if($request->get("mode") == "full"){
-                $this->arParams["MODE"] = "full";
-            }
         }
 
-        return $adresQuery;
+        return $arFilter;
     }
 
     public function executeComponent()
     {
-        
-        if($this->startResultCache()){
-            if(Loader::includeModule("trionix.astroblgaz")){
-                $this->setItems();
-            }
-            $this->endResultCache();
+        if($this->arParams["USE_FILTER"] == "Y"){
+            $this->setFields();
+            $this->arResult["FIELDS"] = $this->getFields();
         }
-
-        $adresQuery = $this->implementRequest();
-        $this->setCustomers($adresQuery);
-
-        $this->arResult["ITEMS"] = $this->getItems();
-        $this->arResult["CUSTOMERS"] = $this->getCustomers();
-
-        if(!empty($this->getItems())) {
-            $this->grouppingItems();
-        }
-
-        $this->arResult["GROUP_ITEMS"] = $this->getItems();
-        $this->arResult["ERRORS"] = $this->getErrors();
-
+        $this->userPost();
         $this->includeComponentTemplate();
 
-        if(empty($this->getErrors())){
-            return $this->getFilter();
+        // Возможные варианты фильра
+        if(!empty($this->arResult["POST"][$this->arParams["INPUT_CUSTOMER"]]["ADRESS"])){
+            return array("ADRESS" => $this->arResult["POST"][$this->arParams["INPUT_CUSTOMER"]]["ADRESS"]);
+        }
+        elseif(!empty($this->arResult["POST"][$this->arParams["INPUT_CUSTOMER"]]["SCORE"])){
+            return array("SCORE" => $this->arResult["POST"][$this->arParams["INPUT_CUSTOMER"]]["SCORE"]);
+        }
+        elseif(!empty($this->arResult["POST"][$this->arParams["INPUT_ADRESS"]])){
+            return $this->combinateResultFilter();
         }
     }
 }
